@@ -17,6 +17,40 @@ We collected a liquid-based cervical cytology images dataset, called Cervical Ce
 ![method](demo/flowchart.jpg)
 The implementation of the GRAM and RRAM is in [roi_attention_head.py](mmdet/models/roi_heads/bbox_heads/roi_attention_head.py).
 
+## Install
+```bash
+# 2080
+conda create -n cer-det python==3.7
+
+pip install torch==1.7.1 torchvision==0.8.2 torchaudio==0.7.2
+pip install yapf==0.32.0
+
+pip install openmim
+mim install mmcv-full==1.2.0
+
+cd CR4CACD
+
+pip install -r requirements/build.txt
+pip install -v -e .  # or "python setup.py develop"
+
+
+# 3080  
+
+conda create -n cer-det python==3.7
+
+# torchv1.8.2 with LTS support
+conda install pytorch torchvision torchaudio cudatoolkit=11.1 -c pytorch-lts -c nvidia
+pip install yapf==0.32.0
+
+pip install openmim
+mim install mmcv-full==1.2.0
+
+cd CR4CACD
+
+pip install -r requirements/build.txt
+pip install -v -e .  # or "python setup.py develop"
+```
+
 ## Conifgs
 
 We set up 5 config files to realize GRAM and RRAM including different combination strategies. Refer to [configs/roi_annention](configs/roi_attention) for details.
