@@ -14,14 +14,14 @@ from mmdet.apis import multi_gpu_test, single_gpu_test
 from mmdet.datasets import (build_dataloader, build_dataset,
                             replace_ImageToTensor)
 from mmdet.models import build_detector
-
+import time
 
 def parse_args():
     parser = argparse.ArgumentParser(
         description='MMDet test (and eval) a model')
-    parser.add_argument('config', help='test config file path')
-    parser.add_argument('checkpoint', help='checkpoint file')
-    parser.add_argument('--out', help='output result file in pickle format')
+    parser.add_argument('--config', default='configs/ComparisonDetectorDataset/cas_rram_gram_multi.py', help='test config file path')
+    parser.add_argument('--checkpoint', default='/root/userfolder/projects/CR4CACD/checkpoints/cas_rram_gram_multi_epoch_24.pth', help='checkpoint file')
+    parser.add_argument('--out', default='output-tmp.pkl',help='output result file in pickle format')
     parser.add_argument(
         '--fuse-conv-bn',
         action='store_true',
@@ -41,7 +41,8 @@ def parse_args():
         ' "segm", "proposal" for COCO, and "mAP", "recall" for PASCAL VOC')
     parser.add_argument('--show', action='store_true', help='show results')
     parser.add_argument(
-        '--show-dir', help='directory where painted images will be saved')
+        '--show-dir', 
+        default='output-tmp', help='directory where painted images will be saved')
     parser.add_argument(
         '--show-score-thr',
         type=float,
@@ -93,15 +94,14 @@ def parse_args():
         args.eval_options = args.options
     return args
 
-
 def main():
     args = parse_args()
 
-    assert args.out or args.eval or args.format_only or args.show \
-        or args.show_dir, \
-        ('Please specify at least one operation (save/eval/format/show the '
-         'results / save the results) with the argument "--out", "--eval"'
-         ', "--format-only", "--show" or "--show-dir"')
+    # assert args.out or args.eval or args.format_only or args.show \
+    #     or args.show_dir, \
+    #     ('Please specify at least one operation (save/eval/format/show the '
+    #      'results / save the results) with the argument "--out", "--eval"'
+    #      ', "--format-only", "--show" or "--show-dir"')
 
     if args.eval and args.format_only:
         raise ValueError('--eval and --format_only cannot be both specified')
@@ -149,6 +149,48 @@ def main():
     if samples_per_gpu > 1:
         # Replace 'ImageToTensor' to 'DefaultFormatBundle'
         cfg.data.test.pipeline = replace_ImageToTensor(cfg.data.test.pipeline)
+
+    
+    # build the model and load checkpoint
+    model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
+    model = model.to('cuda')
+
+    model.train()
+    
+    # n_parameters = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    # num_total_param = sum(p.numel() for p in model.parameters())
+    # print('Number of total parameters: {}, tunable parameters: {}'.format(num_total_param, n_parameters))
+    
+    
+    # batch_size = 4
+    # input_data = torch.randn(1, 3, 1333, 800)
+    # device = 'cuda'
+    # input_datas = [input_data] * batch_size
+    # for i in range(batch_size):
+    #     input_datas[i] = input_datas[i].to(device)
+
+    # # 预热
+    # with torch.no_grad():
+    #     for _ in range(10):
+    #         _ = model.forward_test(input_datas, img_metas=[[{'img_shape':(3,1333,800) ,'scale_factor':1, 'flip': False, 'flip_direction': 0}]]*batch_size)
+
+    # # 测量时间
+    # start_time = time.time()
+    # with torch.no_grad():
+    #     for _ in range(100):  # 进行100次前向传播
+    #         _ = model.forward_test(input_datas, img_metas=[[{'img_shape':(3,1333,800) ,'scale_factor':1, 'flip': False, 'flip_direction': 0}]]*batch_size)
+    # end_time = time.time()
+
+    # # 计算FPS
+    # elapsed_time = end_time - start_time
+    # fps = (100 * batch_size) / elapsed_time
+    # print(f"模型每秒处理 {fps} 个样本, 经过了{elapsed_time}秒")
+    # return
+    
+    fp16_cfg = cfg.get('fp16', None)
+    if fp16_cfg is not None:
+        wrap_fp16_model(model)
+    checkpoint = load_checkpoint(model, args.checkpoint, map_location='cpu')
     dataset = build_dataset(cfg.data.test)
     data_loader = build_dataloader(
         dataset,
@@ -157,12 +199,6 @@ def main():
         dist=distributed,
         shuffle=False)
 
-    # build the model and load checkpoint
-    model = build_detector(cfg.model, train_cfg=None, test_cfg=cfg.test_cfg)
-    fp16_cfg = cfg.get('fp16', None)
-    if fp16_cfg is not None:
-        wrap_fp16_model(model)
-    checkpoint = load_checkpoint(model, args.checkpoint, map_location='cpu')
     if args.fuse_conv_bn:
         model = fuse_conv_bn(model)
     # old versions did not save class info in checkpoints, this walkaround is
@@ -199,7 +235,6 @@ def main():
                 eval_kwargs.pop(key, None)
             eval_kwargs.update(dict(metric=args.eval, **kwargs))
             print(dataset.evaluate(outputs, **eval_kwargs))
-
 
 if __name__ == '__main__':
     main()
